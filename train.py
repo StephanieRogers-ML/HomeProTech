@@ -1,127 +1,277 @@
-import time
-import copy
-import numpy as np
+import argparse
 import math
-
-from options import Options
-opt = Options().parse()  # set CUDA_VISIBLE_DEVICES before import torch
-
-import torch
-import torchvision
-from torch.autograd import Variable
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import random
+import h5py
 import numpy as np
+import tensorflow as tf
+import socket
 
-from models import losses
-from models.segmenter import Model
-from data.shapenet_loader import ShapeNetLoader
-from util.visualizer import Visualizer
+import os
+import sys
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
+sys.path.append(BASE_DIR)
+sys.path.append(ROOT_DIR)
+sys.path.append(os.path.join(ROOT_DIR, 'utils'))
+import provider
+import tf_util
+from model import *
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
+parser.add_argument('--log_dir', default='log', help='Log dir [default: log]')
+parser.add_argument('--num_point', type=int, default=4096, help='Point number [default: 4096]')
+parser.add_argument('--max_epoch', type=int, default=50, help='Epoch to run [default: 50]')
+parser.add_argument('--batch_size', type=int, default=24, help='Batch Size during training [default: 24]')
+parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
+parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
+parser.add_argument('--optimizer', default='adam', help='adam or momentum [default: adam]')
+parser.add_argument('--decay_step', type=int, default=300000, help='Decay step for lr decay [default: 300000]')
+parser.add_argument('--decay_rate', type=float, default=0.5, help='Decay rate for lr decay [default: 0.5]')
+parser.add_argument('--test_area', type=int, default=6, help='Which area to use for test, option: 1-6 [default: 6]')
+FLAGS = parser.parse_args()
 
 
-if __name__=='__main__':
-    trainset = ShapeNetLoader(opt.dataroot, 'train', opt)
-    dataset_size = len(trainset)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=opt.batch_size, shuffle=True, num_workers=opt.nThreads)
-    print('#training point clouds = %d' % len(trainset))
+BATCH_SIZE = FLAGS.batch_size
+NUM_POINT = FLAGS.num_point
+MAX_EPOCH = FLAGS.max_epoch
+NUM_POINT = FLAGS.num_point
+BASE_LEARNING_RATE = FLAGS.learning_rate
+GPU_INDEX = FLAGS.gpu
+MOMENTUM = FLAGS.momentum
+OPTIMIZER = FLAGS.optimizer
+DECAY_STEP = FLAGS.decay_step
+DECAY_RATE = FLAGS.decay_rate
 
-    testset = ShapeNetLoader(opt.dataroot, 'test', opt)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=opt.batch_size, shuffle=False, num_workers=opt.nThreads)
+LOG_DIR = FLAGS.log_dir
+if not os.path.exists(LOG_DIR): os.mkdir(LOG_DIR)
+os.system('cp model.py %s' % (LOG_DIR)) # bkp of model def
+os.system('cp train.py %s' % (LOG_DIR)) # bkp of train procedure
+LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'w')
+LOG_FOUT.write(str(FLAGS)+'\n')
 
-    visualizer = Visualizer(opt)
+MAX_NUM_POINT = 4096
+NUM_CLASSES = 13
 
-    # create model, optionally load pre-trained model
-    model = Model(opt)
-    if opt.pretrain is not None:
-        model.encoder.load_state_dict(torch.load(opt.pretrain))
+BN_INIT_DECAY = 0.5
+BN_DECAY_DECAY_RATE = 0.5
+#BN_DECAY_DECAY_STEP = float(DECAY_STEP * 2)
+BN_DECAY_DECAY_STEP = float(DECAY_STEP)
+BN_DECAY_CLIP = 0.99
 
-    # load pre-trained model
-    # folder = 'checkpoints/'
-    # model_epoch = '2'
-    # model_acc = '0.914946'
-    # model.encoder.load_state_dict(torch.load(folder + model_epoch + '_' + model_acc + '_net_encoder.pth'))
-    # model.segmenter.load_state_dict(torch.load(folder + model_epoch + '_' + model_acc + '_net_segmenter.pth'))
+HOSTNAME = socket.gethostname()
 
-    best_iou = 0
-    for epoch in range(601):
+ALL_FILES = provider.getDataFiles('indoor3d_sem_seg_hdf5_data/all_files.txt')
+room_filelist = [line.rstrip() for line in open('indoor3d_sem_seg_hdf5_data/room_filelist.txt')]
 
-        epoch_iter = 0
-        for i, data in enumerate(trainloader):
-            iter_start_time = time.time()
-            epoch_iter += opt.batch_size
+# Load ALL data
+data_batch_list = []
+label_batch_list = []
+for h5_filename in ALL_FILES:
+    data_batch, label_batch = provider.loadDataFile(h5_filename)
+    data_batch_list.append(data_batch)
+    label_batch_list.append(label_batch)
+data_batches = np.concatenate(data_batch_list, 0)
+label_batches = np.concatenate(label_batch_list, 0)
+print(data_batches.shape)
+print(label_batches.shape)
 
-            input_pc, input_sn, input_label, input_seg, input_node, input_node_knn_I = data
-            model.set_input(input_pc, input_sn, input_label, input_seg, input_node, input_node_knn_I)
+test_area = 'Area_'+str(FLAGS.test_area)
+train_idxs = []
+test_idxs = []
+for i,room_name in enumerate(room_filelist):
+    if test_area in room_name:
+        test_idxs.append(i)
+    else:
+        train_idxs.append(i)
 
-            model.optimize()
-
-            if i % 100 == 0:
-                # print/plot errors
-                t = (time.time() - iter_start_time) / opt.batch_size
-
-                errors = model.get_current_errors()
-
-                visualizer.print_current_errors(epoch, epoch_iter, errors, t)
-                visualizer.plot_current_errors(epoch, float(epoch_iter) / dataset_size, opt, errors)
-
-                # print(model.autoencoder.encoder.feature)
-                # visuals = model.get_current_visuals()
-                # visualizer.display_current_results(visuals, epoch, i)
-
-        # test network
-        if epoch >= 0 and epoch%1==0:
-            batch_amount = 0
-            model.test_loss_segmenter.data.zero_()
-            model.test_accuracy_segmenter.data.zero_()
-            model.test_iou.data.zero_()
-            for i, data in enumerate(testloader):
-                input_pc, input_sn, input_label, input_seg, input_node, input_node_knn_I = data
-                model.set_input(input_pc, input_sn, input_label, input_seg, input_node, input_node_knn_I)
-                model.test_model()
-
-                batch_amount += input_label.size()[0]
-
-                # # accumulate loss
-                model.test_loss_segmenter += model.loss_segmenter.detach() * input_label.size()[0]
-
-                _, predicted_seg = torch.max(model.score_segmenter.data, dim=1, keepdim=False)
-                correct_mask = torch.eq(predicted_seg, model.input_seg).float()
-                test_accuracy_segmenter = torch.mean(correct_mask)
-                model.test_accuracy_segmenter += test_accuracy_segmenter * input_label.size()[0]
-
-                # segmentation iou
-                test_iou_batch = losses.compute_iou(model.score_segmenter.cpu().data, model.input_seg.cpu().data, model.input_label.cpu().data, visualizer, opt, input_pc.cpu().data)
-                model.test_iou += test_iou_batch * input_label.size()[0]
-
-                # print(test_iou_batch)
-                # print(model.score_segmenter.size())
-
-            print(batch_amount)
-            model.test_loss_segmenter /= batch_amount
-            model.test_accuracy_segmenter /= batch_amount
-            model.test_iou /= batch_amount
-            if model.test_iou.item() > best_iou:
-                best_iou = model.test_iou.item()
-            print('Tested network. So far best segmentation: %f' % (best_iou) )
-
-            # save network
-            if model.test_iou.item() > 0.835:
-                print("Saving network...")
-                model.save_network(model.encoder, 'encoder', '%d_%f' % (epoch, model.test_iou.item()), opt.gpu_id)
-                model.save_network(model.segmenter, 'segmenter', '%d_%f' % (epoch, model.test_iou.item()), opt.gpu_id)
-
-        # learning rate decay
-        if epoch%30==0 and epoch>0:
-            model.update_learning_rate(0.5)
-
-        # save network
-        # if epoch%20==0 and epoch>0:
-        #     print("Saving network...")
-        #     model.save_network(model.classifier, 'cls', '%d' % epoch, opt.gpu_id)
+train_data = data_batches[train_idxs,...]
+train_label = label_batches[train_idxs]
+test_data = data_batches[test_idxs,...]
+test_label = label_batches[test_idxs]
+print(train_data.shape, train_label.shape)
+print(test_data.shape, test_label.shape)
 
 
 
 
+def log_string(out_str):
+    LOG_FOUT.write(out_str+'\n')
+    LOG_FOUT.flush()
+    print(out_str)
 
+
+def get_learning_rate(batch):
+    learning_rate = tf.train.exponential_decay(
+                        BASE_LEARNING_RATE,  # Base learning rate.
+                        batch * BATCH_SIZE,  # Current index into the dataset.
+                        DECAY_STEP,          # Decay step.
+                        DECAY_RATE,          # Decay rate.
+                        staircase=True)
+    learning_rate = tf.maximum(learning_rate, 0.00001) # CLIP THE LEARNING RATE!!
+    return learning_rate        
+
+def get_bn_decay(batch):
+    bn_momentum = tf.train.exponential_decay(
+                      BN_INIT_DECAY,
+                      batch*BATCH_SIZE,
+                      BN_DECAY_DECAY_STEP,
+                      BN_DECAY_DECAY_RATE,
+                      staircase=True)
+    bn_decay = tf.minimum(BN_DECAY_CLIP, 1 - bn_momentum)
+    return bn_decay
+
+def train():
+    with tf.Graph().as_default():
+        with tf.device('/gpu:'+str(GPU_INDEX)):
+            pointclouds_pl, labels_pl = placeholder_inputs(BATCH_SIZE, NUM_POINT)
+            is_training_pl = tf.placeholder(tf.bool, shape=())
+            
+            # Note the global_step=batch parameter to minimize. 
+            # That tells the optimizer to helpfully increment the 'batch' parameter for you every time it trains.
+            batch = tf.Variable(0)
+            bn_decay = get_bn_decay(batch)
+            tf.summary.scalar('bn_decay', bn_decay)
+
+            # Get model and loss 
+            pred = get_model(pointclouds_pl, is_training_pl, bn_decay=bn_decay)
+            loss = get_loss(pred, labels_pl)
+            tf.summary.scalar('loss', loss)
+
+            correct = tf.equal(tf.argmax(pred, 2), tf.to_int64(labels_pl))
+            accuracy = tf.reduce_sum(tf.cast(correct, tf.float32)) / float(BATCH_SIZE*NUM_POINT)
+            tf.summary.scalar('accuracy', accuracy)
+
+            # Get training operator
+            learning_rate = get_learning_rate(batch)
+            tf.summary.scalar('learning_rate', learning_rate)
+            if OPTIMIZER == 'momentum':
+                optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=MOMENTUM)
+            elif OPTIMIZER == 'adam':
+                optimizer = tf.train.AdamOptimizer(learning_rate)
+            train_op = optimizer.minimize(loss, global_step=batch)
+            
+            # Add ops to save and restore all the variables.
+            saver = tf.train.Saver()
+            
+        # Create a session
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        config.allow_soft_placement = True
+        config.log_device_placement = True
+        sess = tf.Session(config=config)
+
+        # Add summary writers
+        merged = tf.summary.merge_all()
+        train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, 'train'),
+                                  sess.graph)
+        test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, 'test'))
+
+        # Init variables
+        init = tf.global_variables_initializer()
+        sess.run(init, {is_training_pl:True})
+
+        ops = {'pointclouds_pl': pointclouds_pl,
+               'labels_pl': labels_pl,
+               'is_training_pl': is_training_pl,
+               'pred': pred,
+               'loss': loss,
+               'train_op': train_op,
+               'merged': merged,
+               'step': batch}
+
+        for epoch in range(MAX_EPOCH):
+            log_string('**** EPOCH %03d ****' % (epoch))
+            sys.stdout.flush()
+             
+            train_one_epoch(sess, ops, train_writer)
+            eval_one_epoch(sess, ops, test_writer)
+            
+            # Save the variables to disk.
+            if epoch % 10 == 0:
+                save_path = saver.save(sess, os.path.join(LOG_DIR, "model.ckpt"))
+                log_string("Model saved in file: %s" % save_path)
+
+
+
+def train_one_epoch(sess, ops, train_writer):
+    """ ops: dict mapping from string to tf ops """
+    is_training = True
+    
+    log_string('----')
+    current_data, current_label, _ = provider.shuffle_data(train_data[:,0:NUM_POINT,:], train_label) 
+    
+    file_size = current_data.shape[0]
+    num_batches = file_size // BATCH_SIZE
+    
+    total_correct = 0
+    total_seen = 0
+    loss_sum = 0
+    
+    for batch_idx in range(num_batches):
+        if batch_idx % 100 == 0:
+            print('Current batch/total batch num: %d/%d'%(batch_idx,num_batches))
+        start_idx = batch_idx * BATCH_SIZE
+        end_idx = (batch_idx+1) * BATCH_SIZE
+        
+        feed_dict = {ops['pointclouds_pl']: current_data[start_idx:end_idx, :, :],
+                     ops['labels_pl']: current_label[start_idx:end_idx],
+                     ops['is_training_pl']: is_training,}
+        summary, step, _, loss_val, pred_val = sess.run([ops['merged'], ops['step'], ops['train_op'], ops['loss'], ops['pred']],
+                                         feed_dict=feed_dict)
+        train_writer.add_summary(summary, step)
+        pred_val = np.argmax(pred_val, 2)
+        correct = np.sum(pred_val == current_label[start_idx:end_idx])
+        total_correct += correct
+        total_seen += (BATCH_SIZE*NUM_POINT)
+        loss_sum += loss_val
+    
+    log_string('mean loss: %f' % (loss_sum / float(num_batches)))
+    log_string('accuracy: %f' % (total_correct / float(total_seen)))
+
+        
+def eval_one_epoch(sess, ops, test_writer):
+    """ ops: dict mapping from string to tf ops """
+    is_training = False
+    total_correct = 0
+    total_seen = 0
+    loss_sum = 0
+    total_seen_class = [0 for _ in range(NUM_CLASSES)]
+    total_correct_class = [0 for _ in range(NUM_CLASSES)]
+    
+    log_string('----')
+    current_data = test_data[:,0:NUM_POINT,:]
+    current_label = np.squeeze(test_label)
+    
+    file_size = current_data.shape[0]
+    num_batches = file_size // BATCH_SIZE
+    
+    for batch_idx in range(num_batches):
+        start_idx = batch_idx * BATCH_SIZE
+        end_idx = (batch_idx+1) * BATCH_SIZE
+
+        feed_dict = {ops['pointclouds_pl']: current_data[start_idx:end_idx, :, :],
+                     ops['labels_pl']: current_label[start_idx:end_idx],
+                     ops['is_training_pl']: is_training}
+        summary, step, loss_val, pred_val = sess.run([ops['merged'], ops['step'], ops['loss'], ops['pred']],
+                                      feed_dict=feed_dict)
+        test_writer.add_summary(summary, step)
+        pred_val = np.argmax(pred_val, 2)
+        correct = np.sum(pred_val == current_label[start_idx:end_idx])
+        total_correct += correct
+        total_seen += (BATCH_SIZE*NUM_POINT)
+        loss_sum += (loss_val*BATCH_SIZE)
+        for i in range(start_idx, end_idx):
+            for j in range(NUM_POINT):
+                l = current_label[i, j]
+                total_seen_class[l] += 1
+                total_correct_class[l] += (pred_val[i-start_idx, j] == l)
+            
+    log_string('eval mean loss: %f' % (loss_sum / float(total_seen/NUM_POINT)))
+    log_string('eval accuracy: %f'% (total_correct / float(total_seen)))
+    log_string('eval avg class acc: %f' % (np.mean(np.array(total_correct_class)/np.array(total_seen_class,dtype=np.float))))
+         
+
+
+if __name__ == "__main__":
+    train()
+    LOG_FOUT.close()
