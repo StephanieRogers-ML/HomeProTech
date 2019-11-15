@@ -16,6 +16,17 @@ from mpl_toolkits.mplot3d import Axes3D
 read_xyz_data = lambda path, rows: pd.read_table(path, sep = ' ', nrows = rows, names = ['x', 'y', 'z',  'r', 'g','b'], header = None)
 read_xyz_data('SD2_full_home_simplified_1cm.xyz', :)
 
+def preprocess_point_cloud(point_cloud):
+    ''' Prepare the numpy point cloud (N,3) for forward pass '''
+    point_cloud = point_cloud[:,0:3] # do not use color for now
+    floor_height = np.percentile(point_cloud[:,2],0.99)
+    height = point_cloud[:,2] - floor_height
+    point_cloud = np.concatenate([point_cloud, np.expand_dims(height, 1)],1) # (N,4) or (N,7)
+    point_cloud = random_sampling(point_cloud, FLAGS.num_point)
+    pc = np.expand_dims(point_cloud.astype(np.float32), 0) # (1,40000,4)
+    return pc
+
+
 fig, m_axs = plt.subplots(1, 3, figsize = (20, 5))
 ax_names = 'xyz'
 for i, c_ax in enumerate(m_axs.flatten()):
