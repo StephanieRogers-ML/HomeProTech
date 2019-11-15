@@ -1,18 +1,10 @@
 # HomeProTech
 ## Tech to Protect Contest 5 Hackathon Submission:  Fire Safety in 3D:  Incentivizing Homeowners to Create Pre-Incident Plan for Firefighters
 
-![teaser](https://github.com/sshaoshuai/PointRCNN/blob/master/doc/teaser.png)
-
 Code release for the Tech to Protect Online National Hackathon, November 2019.
 
 **Authors**:Emily, Katherine, Judson, Stephanie.
-
-[[arXiv]](https://arxiv.org/abs/1812.04244)&nbsp;  [[Project Page]](#)&nbsp;
-
-## Introduction
-In this work, we propose the
-
-For more details , please refer to [our proto-type](https://arxiv.org/abs/1812.04244) or [project page](#).
+https://github.com/kalex19/Home-Pro-Tech
 
 
 ## Installation
@@ -22,7 +14,19 @@ All the codes are tested in the following environment:
 * Python 3.6+
 * PyTorch 1.0
 
-### To Use
+### To Use 
+## PointNet trained on modelnet40 & shapenet with Pytorch
+```
+git clone https://github.com/fxia22/pointnet.pytorch
+cd pointnet.pytorch
+pip install -e .
+cd script
+bash build.sh #build C++ code for visualization
+bash download.sh #download dataset
+cd utils
+python train_classification.py --dataset <dataset path> --nepoch=<number epochs> --dataset_type <modelnet40 | shapenet>
+python train_segmentation.py --dataset <dataset path> --nepoch=<number epochs> 
+```
 https://github.com/StephanieRogers-ML/HomeProTech/edit/master/README.md
 a. Clone the HomeProTech repository.
 ```shell
@@ -31,13 +35,10 @@ git clone --recursive https://github.com/StephanieRogers-ML/HomeProTech.git
 
 b. Install the dependent python libraries like `easydict`,`tqdm`, `tensorboardX ` etc.
 
-c. Build and install the `pointnet2_lib`, `iou3d`, `roipool3d` libraries by executing the following command:
-```shell
-sh build_and_install.sh
-```
 
 ## Dataset preparation
-Please download the official [KITTI 3D object detection](http://www.cvlibs.net/datasets/kitti/eval_object.php?obj_benchmark=3d) dataset and organize the downloaded files as follows: 
+Part Segmentation - ShapeNetPart dataset
+The main datasets used for transfer learning for point cloud classification and segmentation are: 
 ```
 HomeProTech
 ├── data
