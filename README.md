@@ -2,8 +2,11 @@
 ## Tech to Protect Contest 5 Hackathon Submission:  Fire Safety in 3D:  Incentivizing Homeowners to Create Pre-Incident Plan for Firefighters
 
 Code release for the Tech to Protect Online National Hackathon, November 2019.
-Online Contest Submission, January 2020.
-https://www.techtoprotectchallenge.org/from-interior-design-to-ux-at-the-denver-tech-to-protect-challenge-hackathon/
+Online Contest Submission, January 2020.  
+
+https://www.techtoprotectchallenge.org/from-interior-design-to-ux-at-the-denver-tech-to-protect-challenge-hackathon/  
+
+
 **Authors**:Emily, Katherine, Judson, Stephanie.
 https://github.com/kalex19/Home-Pro-Tech
 
