@@ -63,8 +63,7 @@ b. Install the dependent python libraries like `easydict`,`tqdm`, `tensorboardX 
 
 
 ## Dataset preparation
-Part Segmentation - ShapeNetPart dataset
-The main datasets used for transfer learning for point cloud classification and segmentation are: 
+
 ```
 HomeProTech
 ├── data
@@ -79,16 +78,5 @@ HomeProTech
 ├── tools
 ```
 
-### Quick demo
-You could run the following command to evaluate the pretrained model: 
-```
-python eval_rcnn.py --cfg_file cfgs/default.yaml --ckpt PointRCNN.pth --batch_size 1 --eval_mode rcnn --set RPN.LOC_XZ_FINE False
-```
-
-## Inference
-* To evaluate a single checkpoint, run the following command with `--ckpt` to specify the checkpoint to be evaluated:
-```
-python eval_rcnn.py --cfg_file cfgs/default.yaml --ckpt ../output/rpn/ckpt/checkpoint_epoch_200.pth --batch_size 4 --eval_mode rcnn 
-```
 
 
