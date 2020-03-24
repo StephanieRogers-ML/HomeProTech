@@ -1,8 +1,6 @@
 # PyTorch Flask API
 
-This repo contains a sample code to show how to create a Flask API server by deploying our PyTorch model
-
-If you'd like to learn how to deploy to Heroku, then check [this repo](https://github.com/avinassh/pytorch-flask-api-heroku).
+This repo contains code to  create a Flask API server by deploying our PyTorch model to Heroku.
 
 
 ## How to 
