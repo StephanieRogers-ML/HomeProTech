@@ -1,0 +1,6 @@
+{
+  "name": "Home-Pro-Tec",
+  "description": "Identify hazards within the home using Pytorch",
+  "repository": "https://github.com/StephanieRogers-ML/HomeProTech",
+  "keywords": ["python", "flask", "pytorch", "bootstrap"]
+}
