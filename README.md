@@ -12,8 +12,8 @@ https://www.techtoprotectchallenge.org/from-interior-design-to-ux-at-the-denver-
 **Authors**:Emily, Katherine, Judson, Stephanie.
 https://github.com/kalex19/Home-Pro-Tech
 
-
-# Tech To Protect - Contest #5
+![Future](https://github.com/StephanieRogers-ML/HomeProTech/blob/master/pytorch-flask-api-heroku-home-pro-tec/static/ModelFlow.jpg)
+# Tech To Protect - Contest #5 
 
 ## Home Pro-Tech
 ### Introduction
