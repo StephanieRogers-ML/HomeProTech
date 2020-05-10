@@ -61,10 +61,10 @@ When the user inputs an image or 3d scan of an object, room, or entire home; usi
 Built with Pytorch using Flask framework and deployed on Heroku  Using transfer learning, an approach to obtain state of the art results, we use Minkowski Engine using ResNets and PointNet ++ using MLP for object detection and scene segmentation from weights trained on Modelnet40 and Scannet trained on 45,000 indoor scenes- with capabilities to classify roughly 20 different classes.   These predictions are aggregated and voted on to improve accuracy and further classify.   We sample 4096 points per scan using Farthest Point Sampling for optimal coverage. For the sparse, voxel-based Resnet14 we fix the voxel size to 2cm.  Images are processed with Deeplabv3-ResNet101, which is contructed by a Deeplabv3 model with a ResNet-101 backbone trained on a subset of COCO train2017, on the 20 categories that are present in the Pascal VOC dataset.
 
 1. Architecture  
-  1a. PointNet++ 
-    trained on 47623 samples and tested on 18923 samples Stanford Indoor 3D
-  1b. MinkUNet34  
-    pre-trained weights from ScanNet, test with Stanford?
+  1a. PointNet++   
+    trained on 47623 samples and tested on 18923 samples Stanford Indoor 3D  
+  1b. MinkUNet34     
+    pre-trained weights from ScanNet    
     trained on ModelNet40
   1c. fully_connected  
   1d. deeplab  
@@ -133,9 +133,8 @@ util.py
 | fully-convolutional | semantic segmentation  | | |
 |deeplabv3_resnet101 | ResNet 2D |Scene Segmentation | 92.4 | 67.4 |
 
- 
-  Minkowski uses ScanNet Weights and transforms, voxelizes, and passed through resnet
-  PointNet uses Stanford and transforms, passes through MLP, Max pools and then classifies
+ Minkowski uses ScanNet Weights and transforms, voxelizes, and passed through resnet  
+ PointNet uses Stanford and transforms, passes through MLP, Max pools and then classifies  
     FullyConnected
 ModelNet- 40 Categories - 12,431 Objects(10 GB)
 Indoor 3d semantic -13 Categories - 1.6 G
