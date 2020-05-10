@@ -36,50 +36,107 @@ The image analysis will also be used to help pre-populate a fire safety checklis
 ## Presentation Information
 You can find a Canva presentation at [this link](https://www.canva.com/design/DADqzVUakYU/tXl77_Pf179MxeIRib-KvQ/view?utm_content=DADqzVUakYU&utm_campaign=designshare&utm_medium=link&utm_source=publishsharelink). You can find the three different prototypes at these links - [the sign up process for new users](https://invis.io/8JUVC43CMAG), [the homeowner experience](https://invis.io/CRUVC5ANPB7), and [the firefighter experience](https://invis.io/T8UVBN1MSWK).
 
-## Installation
-### Requirements
-All the codes are tested in the following environment:
 
-* Python 3.6+
-* PyTorch 1.0
+# HomeProTech Machine Learning Modeling Process
 
-### To Use 
-## PointNet trained on modelnet40 & shapenet with Pytorch
-```
-git clone https://github.com/fxia22/pointnet.pytorch
-cd pointnet.pytorch
-pip install -e .
-cd script
-bash build.sh #build C++ code for visualization
-bash download.sh #download dataset
-cd utils
-python train_classification.py --dataset <dataset path> --nepoch=<number epochs> --dataset_type <modelnet40 | shapenet>
-python train_segmentation.py --dataset <dataset path> --nepoch=<number epochs> 
-```
-https://github.com/StephanieRogers-ML/HomeProTech/edit/master/README.md
-a. Clone the HomeProTech repository.
-```shell
-git clone --recursive https://github.com/StephanieRogers-ML/HomeProTech.git
-```
+| Action  | Command  |
+| ------------- | ------------- | 
+| Demo  | https://home-pro-tec.herokuapp.com/  python app.py | 
+| Download & Run Local  | python app.py --download   | 
+| Evaluate  | python evaluate.py  |
+| Re-Train  | python train.py --  |
 
-b. Install the dependent python libraries like `easydict`,`tqdm`, `tensorboardX ` etc.
+## Setup
+ 
+Ubuntu 18.04  
+CUDA 10.1  
+pytorch 1.4  
+python 3.7  
+GCC 7  
+Trained on Nvidia 2070 Super with 40 G Ram  for model weight files
 
+## Detection & Segmentation Models based on User file input : 2D image .jpg or 3D .ply file
+When the user inputs an image or 3d scan of an object, room, or entire home; using machine learning we output predictions of detected rooms and make recommendations based on detected hazards.     
 
-## Dataset preparation
+Built with Pytorch using Flask framework and deployed on Heroku  Using transfer learning, an approach to obtain state of the art results, we use Minkowski Engine using ResNets and PointNet ++ using MLP for object detection and scene segmentation from weights trained on Modelnet40 and Scannet trained on 45,000 indoor scenes- with capabilities to classify roughly 20 different classes.   These predictions are aggregated and voted on to improve accuracy and further classify.   We sample 4096 points per scan using Farthest Point Sampling for optimal coverage. For the sparse, voxel-based Resnet14 we fix the voxel size to 2cm.  Images are processed with Deeplabv3-ResNet101, which is contructed by a Deeplabv3 model with a ResNet-101 backbone trained on a subset of COCO train2017, on the 20 categories that are present in the Pascal VOC dataset.
 
-```
-HomeProTech
-├── data
-│   ├── vizHome
-│   │   ├── XYZ-RGB File
-│   │   ├── Txt File
-│   │   ├──training
-│   │   ├──testing
-│   ├── vizHome
-├── lib
-├── pointnet2_lib
-├── tools
-```
+1. Architecture  
+  1a. PointNet++ 
+    trained on 47623 samples and tested on 18923 samples Stanford Indoor 3D
+  1b. MinkUNet34  
+    pre-trained weights from ScanNet, test with Stanford?
+    trained on ModelNet40
+  1c. fully_connected  
+  1d. deeplab  
+2. Training data  
+  2a. stanford  
+  2b. scannet  
+  2c. modelnet40  
+  2d. COCO train2017  
+  2e. ImageNet  
+3. Pre-process action  
+  3a. Sampling, Shuffling, Scaling, Rotating  
+  3b. Voxelization  
+  3c. KNN Edge Detection  
+  
+4.  Model   
+  4a. Model weight path  
+  4b. Model summary with class histogram  
+  
+5.  Inference  
+  5a. location, class name  
+  5b. cluster points for query  
+ 
 
+## File structure & Architecture 
+app.py app.json  
+  upload file
+  get prediction
+  get model
+  return analysis, class list
+  
+inference.py
+  forward get prediction
+  get model & load weights from trained on
+models.py
+  minkunet resnet
+  pointnet++ point
+  fully_conv convolutional
+train_seg.py  
+train_cls.py  
+test_seg.py  
+test_cls.py  
+evaluate.py
+util.py
+  preprocess
+  save/load/checkpoint model & weights
+  transformations
+  Analysis
+    Compute & save edges
+    Spatial distance of parameter
+    Is it 2 stories?
+    
+ datasets
+ logs
+    
 
+| dataset  | url  | type |  size  |  classes  |
+| ------------- | ------------- | ------------- | ------------- | ------------- |
+|  Stanford 3D Large-Scale Indoor Spaces | http://buildingparser.stanford.edu/dataset.html  | Scene Segmentation  |89.087| 13 |
+|  ScanNet | http://www.scan-net.org/  | Scene Segmentation  |45,000 indoor scenes| 71.496 |
+|  ModelNet40 | https://modelnet.cs.princeton.edu/  | Scene Segmentation  |10G| 71.496 |
+## Inference & Results
+| Model  | Type  | Task |  Accuracy  |  MIOU  |
+| ------------- | ------------- | ------------- | ------------- | ------------- |
+| Mink34C  | ResNet  | Scene Segmentation  |89.087| 71.496
+| PointNet++  | Object Detection  |     |       |
+| fully-convolutional | semantic segmentation  | | |
+|deeplabv3_resnet101 | ResNet 2D |Scene Segmentation | 92.4 | 67.4 |
+
+ 
+  Minkowski uses ScanNet Weights and transforms, voxelizes, and passed through resnet
+  PointNet uses Stanford and transforms, passes through MLP, Max pools and then classifies
+    FullyConnected
+ModelNet- 40 Categories - 12,431 Objects(10 GB)
+Indoor 3d semantic -13 Categories - 1.6 G
 
